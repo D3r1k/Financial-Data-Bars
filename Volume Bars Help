@@ -3,7 +3,6 @@ library(tidyverse)
 library(tibbletime)# For Time Bar creation, tbl_time &  collapse_by
 library(tidyquant)# For geom_candlestick
 library(forecast)# For autocorrelation
-library(tseries)F For 
 ####
 
 # Data Tidying ------------------------------------------------------------
