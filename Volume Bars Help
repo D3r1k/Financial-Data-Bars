@@ -1,0 +1,139 @@
+#### Load Packages
+library(tidyverse)
+library(tibbletime)# For Time Bar creation, tbl_time &  collapse_by
+library(tidyquant)# For geom_candlestick
+library(forecast)# For autocorrelation
+library(tseries)F For 
+####
+
+# Data Tidying ------------------------------------------------------------
+dat <- dat %>%
+  unite("Date_Time", Date, Time, sep = " ") %>% 
+  mutate("Transaction" = Price*Volume) %>% 
+  select("Date_Time",
+         "Price", 
+         "Volume",
+         "Transaction")
+# Giving Date_Time datetime data type
+dat$Date_Time <- as.POSIXct(dat$Date_Time, tz = "", "%m/%d/%Y %H:%M:%OS")
+
+# I have raw stock data that looks like this, it has every single transaction that occured during the day for 20 days worth.
+
+>dat
+# A tibble: 5,454,950 x 4
+   Date_Time           Price Volume Transaction
+   <dttm>              <dbl>  <dbl>       <dbl>
+ 1 2013-09-01 17:00:00 1640.      8      13122 
+ 2 2013-09-01 17:00:00 1640.      1       1640.
+ 3 2013-09-01 17:00:00 1640.      2       3280.
+ 4 2013-09-01 17:00:00 1640.      1       1640.
+ 5 2013-09-01 17:00:00 1640.      1       1640.
+ 6 2013-09-01 17:00:00 1640.     12      19683 
+ 7 2013-09-01 17:00:00 1640.      4       6561 
+ 8 2013-09-01 17:00:00 1640.      4       6561 
+ 9 2013-09-01 17:00:00 1640.      1       1640.
+10 2013-09-01 17:00:00 1640.      1       1640.
+# ... with 5,454,940 more rows
+
+# Tick Bars ---------------------------------------------------------------
+# Tick bars are simply sampling the raw data every n transactions that occur, so here I have it where we sample every 5,000 transactions that occur
+ticks <- 5000
+
+dat_tick_bars <- dat %>% 
+  mutate("n" = ceiling(length(Price)/ticks), 
+        "tick_bars" = rep(1:n, each = ticks)[seq_along(Price)]) %>% 
+  group_by(tick_bars) %>% 
+  summarise(
+    Date_Time = last(Date_Time),
+    Open  = first(Price),
+    High  = max(Price),
+    Low   = min(Price),
+    Close = last(Price),
+    Volume = sum(Volume)
+  ) %>% 
+  select(-tick_bars)
+  
+  >dat_tick_bars
+# A tibble: 1,091 x 6
+   Date_Time            Open  High   Low Close Volume
+   <dttm>              <dbl> <dbl> <dbl> <dbl>  <dbl>
+ 1 2013-09-01 18:17:57 1640. 1642  1639  1641   21548
+ 2 2013-09-01 20:44:56 1641  1644. 1640. 1642.  16935
+ 3 2013-09-02 01:00:34 1642. 1644  1640. 1643   14520
+ 4 2013-09-02 02:08:37 1643  1644. 1642. 1644.  13737
+ 5 2013-09-02 02:40:34 1644. 1646  1643. 1645.  14970
+ 6 2013-09-02 03:33:18 1645. 1647. 1644. 1646.  13094
+ 7 2013-09-02 04:41:49 1646. 1647. 1645. 1646.  14461
+ 8 2013-09-02 06:27:33 1646. 1648. 1645. 1647.  16893
+ 9 2013-09-02 07:36:45 1647  1648. 1646  1648.  21749
+10 2013-09-02 09:15:11 1648. 1648  1645. 1646   18411
+# ... with 1,081 more rows
+
+# To do this, I used rep to add tick_bars to the data, so I can group the data by the tick_bars as shown above with group_by(tick_bars). 
+#So, once it gets to the 5,000th transaction, the tick_bars would be 2, 10,000th would be 3, and so on...
+
+dat %>% 
+  mutate("n" = ceiling(length(Price)/ticks), 
+               "tick_bars" = rep(1:n, each = ticks)[seq_along(Price)]) %>% 
+                select(-n)
+                
+  # A tibble: 5,454,950 x 5
+   Date_Time           Price Volume Transaction tick_bars
+   <dttm>              <dbl>  <dbl>       <dbl>     <int>
+ 1 2013-09-01 17:00:00 1640.      8      13122          1
+ 2 2013-09-01 17:00:00 1640.      1       1640.         1
+ 3 2013-09-01 17:00:00 1640.      2       3280.         1
+ 4 2013-09-01 17:00:00 1640.      1       1640.         1
+ 5 2013-09-01 17:00:00 1640.      1       1640.         1
+ 6 2013-09-01 17:00:00 1640.     12      19683          1
+ 7 2013-09-01 17:00:00 1640.      4       6561          1
+ 8 2013-09-01 17:00:00 1640.      4       6561          1
+ 9 2013-09-01 17:00:00 1640.      1       1640.         1
+10 2013-09-01 17:00:00 1640.      1       1640.         1
+# ... with 5,454,940 more rows
+
+# Volume Bars -------------------------------------------------------------
+#What I need help with is creating volume bars. Volume bars are where you sample every n amount of volume that occurs. So, I have volume <- 21,731 which means sample every time
+# 21,731 shares have been traded
+
+volume <- 21731
+
+# To better visualize this I've added the cumulative sum of volume.
+dat %>% 
+  mutate("n" = ceiling(sum(Volume)/volume),
+         "csum_Volume" = cumsum(Volume)) %>%
+  select(-c(n, Transaction))
+ 
+ >
+ # A tibble: 5,454,950 x 4
+   Date_Time           Price Volume csum_Volume
+   <dttm>              <dbl>  <dbl>       <dbl>
+ 1 2013-09-01 17:00:00 1640.      8           8
+ 2 2013-09-01 17:00:00 1640.      1           9
+ 3 2013-09-01 17:00:00 1640.      2          11
+ 4 2013-09-01 17:00:00 1640.      1          12
+ 5 2013-09-01 17:00:00 1640.      1          13
+ 6 2013-09-01 17:00:00 1640.     12          25
+ 7 2013-09-01 17:00:00 1640.      4          29
+ 8 2013-09-01 17:00:00 1640.      4          33
+ 9 2013-09-01 17:00:00 1640.      1          34
+10 2013-09-01 17:00:00 1640.      1          35
+# ... with 5,454,940 more rows
+
+# So, what I want to be able to do is similar to what i did with the tick_bars, so I can create volume_bars and group_by(volume_bars)
+# heres my desired ouput assuming I want to sample every 10 volume or 10 shares bought, volume<- 10,  so we can better visualize it compared to the sampling volume<-21,731.
+>
+# A tibble: 5,454,950 x 4
+   Date_Time           Price Volume csum_Volume  volume_bars
+   <dttm>              <dbl>  <dbl>       <dbl>     <int>
+ 1 2013-09-01 17:00:00 1640.      8           8       1
+ 2 2013-09-01 17:00:00 1640.      1           9       1
+ 3 2013-09-01 17:00:00 1640.      2          11       1
+ 4 2013-09-01 17:00:00 1640.      1          12       2
+ 5 2013-09-01 17:00:00 1640.      1          13       2
+ 6 2013-09-01 17:00:00 1640.     12          25       2
+ 7 2013-09-01 17:00:00 1640.      4          29       3
+ 8 2013-09-01 17:00:00 1640.      4          33       3
+ 9 2013-09-01 17:00:00 1640.      1          34       4
+10 2013-09-01 17:00:00 1640.      1          35       4
+# ... with 5,454,940 more rows
